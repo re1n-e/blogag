@@ -51,6 +51,7 @@ func main() {
 	cmds.register("follow", handleFeedFollow)
 	cmds.register("following", handleGetFeedFollowsForUser)
 	cmds.register("unfollow", handlerUnfollowFeed)
+	cmds.register("browse", handleBrowse)
 	if err := cmds.run(&st, cmd); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

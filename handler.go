@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -213,6 +215,7 @@ func scrapeFeeds(s *state) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Feed fetched: ")
 	fmt.Println(feed.Channel.Title)
 	feedFetched := database.MarkFeedFetchedParams{
 		ID:        feedId,
@@ -222,12 +225,88 @@ func scrapeFeeds(s *state) error {
 			Valid: true,
 		},
 	}
-
 	if err := s.db.MarkFeedFetched(context.Background(), feedFetched); err != nil {
 		return fmt.Errorf("failed to mark feed as fetched: %v", err)
 	}
-	fmt.Println("Feed fetched: ")
-	fmt.Println()
+	if err := savePosts(s, feedId, feed); err != nil {
+		return fmt.Errorf("failed to save post: %v", err)
+	}
+	return nil
+}
+
+func ParsePubDate(s string) (time.Time, error) {
+	formats := []string{
+		time.RFC1123Z,
+		time.RFC1123,
+		time.RFC822Z,
+		time.RFC850,
+	}
+
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unknown date format: %s", s)
+}
+
+func savePosts(s *state, feedID uuid.UUID, rssFeed *RSSFeed) error {
+	for _, item := range rssFeed.Channel.Item {
+
+		// Parse pubDate
+		pubTime, err := ParsePubDate(item.PubDate)
+		if err != nil {
+			return err
+		}
+
+		params := database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: item.Description,
+			PublishedAt: pubTime,
+			FeedID:      feedID,
+		}
+
+		// Insert into DB
+		err = s.db.CreatePost(context.Background(), params)
+		if err != nil {
+			if strings.Contains(err.Error(), "23505") {
+				// Duplicate URL -> ignore silently
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handleBrowse(s *state, cmd command) error {
+	var limit int32 = 2
+	if len(cmd.args) == 1 {
+		parsedLimit, err := strconv.Atoi(cmd.args[0])
+		if err != nil {
+			return fmt.Errorf("failed to convert limit: %v", err)
+		}
+		limit = int32(parsedLimit)
+	}
+	uid, err := s.db.GetUserIDbyName(context.Background(), s.cfg.Current_user_name)
+	if err != nil {
+		return fmt.Errorf("failed to retirve user id: %v", err)
+	}
+	param := database.GetPostsForUserParams{
+		UserID: uid,
+		Limit:  limit,
+	}
+	posts, err := s.db.GetPostsForUser(context.Background(), param)
+	if err != nil {
+		return fmt.Errorf("failed to retrive posts: %v", err)
+	}
+	fmt.Println(posts)
 	return nil
 }
 
