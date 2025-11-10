@@ -5,3 +5,18 @@ RETURNING *;
 
 -- name: GetUser :one
 SELECT * FROM users WHERE name = $1;
+
+-- name: GetUserIDbyName :one
+SELECT id FROM users WHERE name = $1;
+
+-- name: GetUserNameById :one
+SELECT name FROM users WHERE id = $1;
+
+-- name: ResetUsers :exec
+TRUNCATE users CASCADE;
+
+-- name: GetUsers :many
+SELECT name FROM users;
+
+
+

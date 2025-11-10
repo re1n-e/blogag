@@ -57,3 +57,61 @@ func (q *Queries) GetUser(ctx context.Context, name string) (User, error) {
 	)
 	return i, err
 }
+
+const getUserIDbyName = `-- name: GetUserIDbyName :one
+SELECT id FROM users WHERE name = $1
+`
+
+func (q *Queries) GetUserIDbyName(ctx context.Context, name string) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, getUserIDbyName, name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getUserNameById = `-- name: GetUserNameById :one
+SELECT name FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserNameById(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserNameById, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
+const getUsers = `-- name: GetUsers :many
+SELECT name FROM users
+`
+
+func (q *Queries) GetUsers(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resetUsers = `-- name: ResetUsers :exec
+TRUNCATE users CASCADE
+`
+
+func (q *Queries) ResetUsers(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, resetUsers)
+	return err
+}
